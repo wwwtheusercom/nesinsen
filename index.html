@@ -157,21 +157,20 @@
         auth = getAuth(app);
         analytics = getAnalytics(app);
 
-        onAuthStateChanged(auth, async (user) => {
+        onAuthStateChanged(auth, (user) => {
             if (user) {
                 userId = user.uid;
             } else {
-                userId = crypto.randomUUID();
-                await signInAnonymously(auth);
+                // Anonim oturum açmayı dene
+                signInAnonymously(auth).then(anonUser => {
+                    userId = anonUser.user.uid;
+                }).catch(error => {
+                    console.error("Anonim kimlik doğrulama hatası:", error);
+                    userId = crypto.randomUUID();
+                });
             }
             authReady = true;
         });
-
-        if (initialAuthToken) {
-            signInWithCustomToken(auth, initialAuthToken).catch(error => console.error("Firebase Auth hatası:", error));
-        } else {
-            signInAnonymously(auth).catch(error => console.error("Firebase Auth hatası:", error));
-        }
 
     } catch (error) {
         console.error("Firebase başlatma hatası:", error);
@@ -290,12 +289,14 @@
         score = 0;
 
         // Her yeni test başladığında önceki cevapları temizle
-        const answersRef = collection(db, `artifacts/${appId}/users/${userId}/quiz_answers`);
-        const answersSnapshot = await getDocs(answersRef);
-        answersSnapshot.forEach(doc => {
-            deleteDoc(doc.ref).catch(e => console.error("Cevap silme hatası:", e));
-        });
-
+        if (userId) { // Kullanıcı kimliği varsa temizle
+             const answersRef = collection(db, `artifacts/${appId}/users/${userId}/quiz_answers`);
+             const answersSnapshot = await getDocs(answersRef);
+             answersSnapshot.forEach(doc => {
+                 deleteDoc(doc.ref).catch(e => console.error("Cevap silme hatası:", e));
+             });
+        }
+       
         // Firebase Analytics'e testin başladığını kaydet
         logEvent(analytics, 'quiz_started', { user_id: userId, nickname: userNickname });
 
@@ -332,15 +333,17 @@
         score += answerIndex;
 
         try {
-            const answersRef = collection(db, `artifacts/${appId}/users/${userId}/quiz_answers`);
-            await addDoc(answersRef, {
-                nickname: userNickname,
-                question: question,
-                answer: answer,
-                createdAt: new Date()
-            });
-            // Firebase Analytics'e her cevabı kaydet
-            logEvent(analytics, 'question_answered', { question: question, answer: answer, nickname: userNickname });
+            if (userId) { // Kullanıcı kimliği varsa kaydet
+                const answersRef = collection(db, `artifacts/${appId}/users/${userId}/quiz_answers`);
+                await addDoc(answersRef, {
+                    nickname: userNickname,
+                    question: question,
+                    answer: answer,
+                    createdAt: new Date()
+                });
+                // Firebase Analytics'e her cevabı kaydet
+                logEvent(analytics, 'question_answered', { question: question, answer: answer, nickname: userNickname });
+            }
         } catch (e) {
             console.error("Firebase'e cevap ekleme hatası: ", e);
         }
