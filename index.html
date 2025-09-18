@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dünyaya Nasıl Bakıyorsun</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #f3f4f6;
+            padding: 1rem;
+            text-align: center;
+        }
+        .card {
+            background-color: #ffffff;
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            padding: 2.5rem;
+            width: 100%;
+            max-width: 32rem;
+            position: relative;
+        }
+        .question-text {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #1f2937;
+            margin-bottom: 2rem;
+        }
+        .option-button {
+            display: block;
+            width: 100%;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            transition: background-color 0.3s, transform 0.1s;
+            cursor: pointer;
+            text-align: left;
+            color: white;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .start-button {
+            padding: 1rem 2.5rem;
+            font-size: 1.25rem;
+            font-weight: 700;
+            border-radius: 9999px;
+            background-color: #6366f1;
+            color: #ffffff;
+            transition: background-color 0.3s, transform 0.1s;
+            cursor: pointer;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .start-button:hover {
+            background-color: #4f46e5;
+        }
+        .start-button:active {
+            transform: scale(0.98);
+        }
+        .result-text {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #1f2937;
+            margin-bottom: 1.5rem;
+        }
+        .result-message {
+            font-size: 1.125rem;
+            color: #4b5563;
+        }
+        .answers-list {
+            list-style-type: none;
+            padding: 0;
+            margin-top: 1.5rem;
+            text-align: left;
+        }
+        .answers-list li {
+            background-color: #f9fafb;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .message-box {
+            position: absolute;
+            top: 1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #fee2e2;
+            color: #b91c1c;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: opacity 0.3s ease-in-out;
+            opacity: 0;
+        }
+        .message-box.show {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+
+<div class="container">
+
+    <!-- Başlangıç Ekranı -->
+    <div id="start-screen" class="card">
+        <h1 class="text-3xl font-bold text-gray-800 mb-4">Çok Ciddi(!) Bilimsel Bir Test</h1>
+        <p class="text-gray-600 mb-2">Dünyaca ünlü profesörler (yok aslında) tarafından hazırlandı.</p>
+        <p class="text-gray-600 mb-8">5 soruya cevap ver, sana özel sonucu öğren.</p>
+        <input type="text" id="nickname-input" class="w-full p-3 rounded-lg border-2 border-gray-300 mb-4 focus:outline-none focus:border-blue-500" placeholder="Takma adını gir...">
+        <button id="start-button" class="start-button">Teste Başla</button>
+        <div id="message-box" class="message-box">Lütfen bir takma ad girin.</div>
+    </div>
+
+    <!-- Test Ekranı (Başlangıçta gizli) -->
+    <div id="quiz-screen" class="card hidden">
+        <div id="question-text" class="question-text"></div>
+        <div id="options-container" class="mt-8"></div>
+    </div>
+
+    <!-- Sonuç Ekranı (Başlangıçta gizli) -->
+    <div id="result-screen" class="card hidden">
+        <h2 id="result-nickname-text" class="result-text"></h2>
+        <p id="result-message" class="result-message"></p>
+        <button id="restart-button" class="start-button mt-6">Tekrar Başla</button>
+    </div>
+
+</div>
+
+<script type="module">
+    // Firebase kütüphanelerini import edin
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, addDoc, onSnapshot, query, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { getAnalytics, logEvent } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-analytics.js";
+
+    // Firebase yapılandırmasını ve uygulama kimliğini tanımlayın
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+    // Firebase ve Firestore'u başlatın
+    let app, db, auth, analytics, userId;
+    let authReady = false;
+
+    try {
+        app = initializeApp(firebaseConfig);
+        db = getFirestore(app);
+        auth = getAuth(app);
+        analytics = getAnalytics(app);
+
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                userId = user.uid;
+            } else {
+                userId = crypto.randomUUID();
+                await signInAnonymously(auth);
+            }
+            authReady = true;
+        });
+
+        if (initialAuthToken) {
+            signInWithCustomToken(auth, initialAuthToken).catch(error => console.error("Firebase Auth hatası:", error));
+        } else {
+            signInAnonymously(auth).catch(error => console.error("Firebase Auth hatası:", error));
+        }
+
+    } catch (error) {
+        console.error("Firebase başlatma hatası:", error);
+    }
+    
+    // Sorular ve seçenekleri
+    const questions = [
+        {
+            question: "Sabah uyanır uyanmaz ilk işin ne olur?",
+            options: [
+                "Kahveye saldırırım ☕",
+                "Telefona bakarım 📱",
+                "Battaniyeye sarılıp “5 dakika daha” derim 😴"
+            ]
+        },
+        {
+            question: "Toplu taşıma aracı aniden sert fren yaptı ve yanındaki yabancının üstüne düştün…",
+            options: [
+                "“Biz evlendik mi şimdi?” diye sorarım 💍",
+                "Ayağa kalkıp ciddi ciddi “özür dilerim” derim 🤓",
+                "Utanıp sanki ben değil o düşmüş gibi davranırım 😅"
+            ]
+        },
+        {
+            question: "Telefonun şarjı %1 ve priz yok… Ne yaparsın?",
+            options: [
+                "Paniklerim, dünyam kararır 😱",
+                "“Oh be, biraz kafam dinlenecek” derim 😌",
+                "Başkasının şarj aletine gizlice dadanırım 🔌"
+            ]
+        },
+        {
+            question: "Yolda yürürken ayağın taşa takıldı, ne yaparsın?",
+            options: [
+                "“Benim suçum değil taş suçlu!” derim 🪨",
+                "Sanki dans figürüymüş gibi devam ederim 💃",
+                "Utanıp telefonla oynuyormuş gibi yaparım 📱"
+            ]
+        },
+        {
+            question: "Bir pizzayı nasıl yersin?",
+            options: [
+                "Dilim dilim, efendi efendi 🍕",
+                "Katlayıp dürüm gibi yerim 🌯",
+                "Peyniri sıyırıp ayrı, hamuru ayrı yerim 😋"
+            ]
+        }
+    ];
+
+    // 20 farklı sonuç mesajı
+    const results = [
+        "Hayatın her anına bahane bulup eğlence çıkaran bir ruh var sende.",
+        "İnsanlar seni ciddiye almaya çalışsa da içindeki mizah hep kazanıyor.",
+        "Basit şeyleri bile şova çevirmekte ustasın.",
+        "Kaos çıktığında bile soğukkanlılığını kaybetmeyen nadir tiplerdensin.",
+        "Tuhaf ama sevimli bir enerji yayıyorsun.",
+        "Çoğu kişi seni tahmin edemez; sürprizlerle dolusun.",
+        "Biraz garip ama kesinlikle unutulmaz bir karaktere sahipsin.",
+        "Hayatındaki aksilikleri bile eğlenceli hale getirebiliyorsun.",
+        "Her ortamda dikkat çekmeyi başarıyorsun, farkında olmasan bile.",
+        "İnsanların yüzünü güldürmek senin gizli süper gücün.",
+        "Başına gelen gariplikler seni pes ettirmek yerine komikleştiriyor.",
+        "Enerjin bazen fazla ama her zaman bulaşıcı.",
+        "“Ne olursa olsun bir yolunu bulurum” kafasındasın.",
+        "Her düşüşü dansa çevirecek kadar yaratıcı bir ruhun var.",
+        "Gündelik hayatı bile sit-com gibi yaşamayı başarıyorsun.",
+        "Normal olmak sana sıkıcı geliyor, farklı olmak ise eğlenceli.",
+        "Hem sakar hem de sempatik bir yanın var, ikisi de sende çok iyi duruyor.",
+        "İnsanların yanında asla sıkıcı bir an yaşanmıyor.",
+        "Hayat sana limon verse sen ondan stand-up show çıkarırsın.",
+        "Kaotik enerjinle her ortamda unutulmaz izler bırakıyorsun."
+    ];
+
+    let currentQuestionIndex = 0;
+    let score = 0;
+    let userNickname = '';
+
+    const startScreen = document.getElementById('start-screen');
+    const quizScreen = document.getElementById('quiz-screen');
+    const resultScreen = document.getElementById('result-screen');
+    const startButton = document.getElementById('start-button');
+    const nicknameInput = document.getElementById('nickname-input');
+    const messageBox = document.getElementById('message-box');
+    const questionText = document.getElementById('question-text');
+    const optionsContainer = document.getElementById('options-container');
+    const resultNicknameText = document.getElementById('result-nickname-text');
+    const resultMessage = document.getElementById('result-message');
+    const answersList = document.getElementById('answers-list');
+
+    // Başlangıç butonuna tıklama olayını dinle
+    startButton.addEventListener('click', startGame);
+
+    // Sonuç ekranındaki "Tekrar Başla" butonuna tıklama olayını dinle
+    const restartButton = document.getElementById('restart-button');
+    restartButton.addEventListener('click', restartTest);
+
+    // Testi başlatan fonksiyon
+    async function startGame() {
+        if (!authReady) {
+            console.log("Kimlik doğrulama bekleniyor...");
+            return;
+        }
+        
+        userNickname = nicknameInput.value.trim();
+        if (userNickname === '') {
+            messageBox.classList.add('show');
+            setTimeout(() => {
+                messageBox.classList.remove('show');
+            }, 3000);
+            return;
+        }
+
+        startScreen.classList.add('hidden');
+        quizScreen.classList.remove('hidden');
+        currentQuestionIndex = 0;
+        score = 0;
+
+        // Her yeni test başladığında önceki cevapları temizle
+        const answersRef = collection(db, `artifacts/${appId}/users/${userId}/quiz_answers`);
+        const answersSnapshot = await getDocs(answersRef);
+        answersSnapshot.forEach(doc => {
+            deleteDoc(doc.ref).catch(e => console.error("Cevap silme hatası:", e));
+        });
+
+        // Firebase Analytics'e testin başladığını kaydet
+        logEvent(analytics, 'quiz_started', { user_id: userId, nickname: userNickname });
+
+        showQuestion();
+    }
+
+    // Soruyu ekrana yazdıran fonksiyon
+    function showQuestion() {
+        if (currentQuestionIndex < questions.length) {
+            const currentQuestion = questions[currentQuestionIndex];
+            questionText.textContent = `${currentQuestionIndex + 1}. ${currentQuestion.question}`;
+            optionsContainer.innerHTML = '';
+
+            const colors = ['#f59e0b', '#10b981', '#ef4444', '#6366f1', '#ec4899'];
+            const shuffledColors = colors.sort(() => 0.5 - Math.random());
+
+            currentQuestion.options.forEach((option, index) => {
+                const button = document.createElement('button');
+                button.textContent = option;
+                button.classList.add('option-button');
+                button.dataset.index = index;
+                button.style.backgroundColor = shuffledColors[index];
+                button.addEventListener('click', () => selectOption(currentQuestion.question, option, index));
+                optionsContainer.appendChild(button);
+            });
+        } else {
+            showResult();
+        }
+    }
+
+    // Seçeneği işleyen fonksiyon
+    async function selectOption(question, answer, answerIndex) {
+        // Her cevaba puan ekle: A=0, B=1, C=2
+        score += answerIndex;
+
+        try {
+            const answersRef = collection(db, `artifacts/${appId}/users/${userId}/quiz_answers`);
+            await addDoc(answersRef, {
+                nickname: userNickname,
+                question: question,
+                answer: answer,
+                createdAt: new Date()
+            });
+            // Firebase Analytics'e her cevabı kaydet
+            logEvent(analytics, 'question_answered', { question: question, answer: answer, nickname: userNickname });
+        } catch (e) {
+            console.error("Firebase'e cevap ekleme hatası: ", e);
+        }
+
+        setTimeout(() => {
+            currentQuestionIndex++;
+            showQuestion();
+        }, 500);
+    }
+
+    // Sonucu gösteren fonksiyon
+    function showResult() {
+        quizScreen.classList.add('hidden');
+        resultScreen.classList.remove('hidden');
+        
+        resultNicknameText.textContent = `Hoş Geldin, ${userNickname}!`;
+
+        // 0-10 arasındaki puanı 0-19 aralığındaki sonuç indekslerine dönüştür
+        const resultIndex = Math.floor(score * 2);
+
+        // Olası sonuç indeksini sınırların içinde tut
+        const finalIndex = Math.min(resultIndex, results.length - 1);
+        
+        resultMessage.textContent = results[finalIndex];
+    }
+
+    // Testi yeniden başlatan fonksiyon
+    function restartTest() {
+        resultScreen.classList.add('hidden');
+        startScreen.classList.remove('hidden');
+        nicknameInput.value = '';
+    }
+</script>
+
+</body>
+</html>
